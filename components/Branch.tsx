@@ -12,7 +12,7 @@ import {
 } from "@/lib/branch";
 
 type Props = {
-  /** Хэдэн өргөс цэцэг болсон (0–5) */
+  /** Хэдэн өргөс цэцэг болсон (0–6) */
   bloomed: number;
   orientation?: "horizontal" | "vertical";
   /** Салхинд ганхах (үр дүнгийн хуудас) */
@@ -32,6 +32,7 @@ const SWAY = [
   { duration: 3.9, delay: 0.6 },
   { duration: 4.2, delay: 1.7 },
   { duration: 3.1, delay: 0.9 },
+  { duration: 4.0, delay: 0.4 },
 ];
 
 const SPARKS = 8;

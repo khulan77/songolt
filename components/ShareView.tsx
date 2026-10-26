@@ -3,17 +3,15 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { toBlob } from "html-to-image";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { CARD_H, CARD_W } from "@/lib/card";
 import { share, ui } from "@/lib/content";
 import { EASE_BOOK } from "./Page";
 import ShareCard from "./ShareCard";
 
 const FILE_NAME = "songolt-minii-songolt.png";
-const CARD_W = 1080;
-const CARD_H = 1920;
 const REEL_URL = process.env.NEXT_PUBLIC_REEL_URL;
 
 type Props = {
-  prisonTitle: string;
   text: string;
   hasCover: boolean;
   count: number | null;
@@ -35,7 +33,7 @@ function isIOS() {
   );
 }
 
-export default function ShareView({ prisonTitle, text, hasCover, count, onRestart }: Props) {
+export default function ShareView({ text, hasCover, count, onRestart }: Props) {
   const cardRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(0.25);
@@ -63,7 +61,7 @@ export default function ShareView({ prisonTitle, text, hasCover, count, onRestar
     return () => {
       alive = false;
     };
-  }, [prisonTitle, text]);
+  }, [text]);
 
   const closeModal = useCallback(() => {
     if (modalUrl) URL.revokeObjectURL(modalUrl);
@@ -77,28 +75,18 @@ export default function ShareView({ prisonTitle, text, hasCover, count, onRestar
     return () => window.removeEventListener("keydown", onKey);
   }, [modalUrl, closeModal]);
 
-  const download = async () => {
-    if (busy) return;
-    let b = blob;
-    if (!b) {
-      setBusy(true);
-      b = cardRef.current ? await renderCard(cardRef.current).catch(() => null) : null;
-      setBusy(false);
-      if (!b) return;
-      setBlob(b);
-    }
+  const getBlob = async (): Promise<Blob | null> => {
+    if (blob) return blob;
+    if (busy || !cardRef.current) return null;
+    setBusy(true);
+    const b = await renderCard(cardRef.current).catch(() => null);
+    setBusy(false);
+    if (b) setBlob(b);
+    return b;
+  };
 
-    const file = new File([b], FILE_NAME, { type: "image/png" });
-    const coarse = window.matchMedia("(pointer: coarse)").matches;
-    if (coarse && navigator.canShare?.({ files: [file] })) {
-      try {
-        await navigator.share({ files: [file] });
-        return;
-      } catch (err) {
-        if ((err as DOMException)?.name === "AbortError") return;
-      }
-    }
-
+  // Татах; iOS дээр татаж чадахгүй тул модалд харуулж удаан дарж хадгалуулна
+  const save = (b: Blob) => {
     const url = URL.createObjectURL(b);
     if (isIOS()) {
       setModalUrl(url);
@@ -113,6 +101,27 @@ export default function ShareView({ prisonTitle, text, hasCover, count, onRestar
     setTimeout(() => URL.revokeObjectURL(url), 4000);
   };
 
+  const download = async () => {
+    const b = await getBlob();
+    if (b) save(b);
+  };
+
+  // Боломжтой бол системийн share sheet (Instagram story руу шууд), үгүй бол татах руу шилжинэ
+  const shareStory = async () => {
+    const b = await getBlob();
+    if (!b) return;
+    const file = new File([b], FILE_NAME, { type: "image/png" });
+    if (navigator.canShare?.({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file], title: share.shareTitle });
+        return;
+      } catch (err) {
+        if ((err as DOMException)?.name === "AbortError") return;
+      }
+    }
+    save(b);
+  };
+
   return (
     <div className="page-scroll flex h-full flex-col items-center px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-16 md:pt-14">
       <h1 className="font-serif text-[30px] text-paper md:text-[34px]">{share.title}</h1>
@@ -122,26 +131,37 @@ export default function ShareView({ prisonTitle, text, hasCover, count, onRestar
         className="relative mt-5 aspect-[9/16] w-[min(62vw,calc((100dvh-360px)*0.5625),300px)] min-w-40 shrink-0 overflow-hidden rounded-xl shadow-[0_30px_70px_-20px_rgba(0,0,0,0.9),0_0_0_1px_rgba(231,181,110,0.18)] md:w-[min(300px,calc((100vh-340px)*0.5625))]"
       >
         <div style={{ width: CARD_W, height: CARD_H, transform: `scale(${scale})`, transformOrigin: "top left" }}>
-          <ShareCard ref={cardRef} prisonTitle={prisonTitle} text={text} hasCover={hasCover} />
+          <ShareCard ref={cardRef} text={text} hasCover={hasCover} />
         </div>
       </div>
 
-      <div className="mt-6 flex w-full max-w-sm flex-col gap-3 sm:flex-row sm:justify-center">
+      <div className="mt-6 flex w-full max-w-sm flex-col gap-3">
         <button
           type="button"
-          onClick={download}
+          onClick={shareStory}
           aria-busy={busy}
-          className="min-h-12 flex-1 rounded-full bg-gold px-6 font-sans text-[16px] text-bg-deep shadow-[0_8px_30px_-8px_rgba(231,181,110,0.6)] transition-transform hover:-translate-y-0.5"
+          className="min-h-12 w-full rounded-full bg-gold px-6 font-sans text-[16px] text-bg-deep shadow-[0_8px_30px_-8px_rgba(231,181,110,0.6)] transition-transform hover:-translate-y-0.5"
         >
-          {share.download}
+          {share.story}
         </button>
-        <button
-          type="button"
-          onClick={onRestart}
-          className="min-h-12 flex-1 rounded-full border border-paper/30 px-6 font-sans text-[16px] text-paper transition-colors hover:border-gold hover:text-gold"
-        >
-          {share.restart}
-        </button>
+        <p className="text-center font-sans text-[14px] leading-[1.55] text-paper/80">{share.storyHint}</p>
+        <div className="mt-1 flex gap-3">
+          <button
+            type="button"
+            onClick={download}
+            aria-busy={busy}
+            className="min-h-12 flex-1 rounded-full border border-gold/50 px-4 font-sans text-[15px] text-gold transition-colors hover:border-gold"
+          >
+            {share.download}
+          </button>
+          <button
+            type="button"
+            onClick={onRestart}
+            className="min-h-12 flex-1 rounded-full border border-paper/30 px-4 font-sans text-[15px] text-paper transition-colors hover:border-gold hover:text-gold"
+          >
+            {share.restart}
+          </button>
+        </div>
       </div>
 
       {REEL_URL && (
@@ -155,7 +175,6 @@ export default function ShareView({ prisonTitle, text, hasCover, count, onRestar
         </a>
       )}
 
-      <p className="mt-5 max-w-sm text-center font-sans text-[14px] leading-[1.55] text-paper/75">{share.hint}</p>
       {count !== null && (
         <p className="mt-3 text-center font-serif text-[15px] italic text-gold/90">{share.counter(count)}</p>
       )}

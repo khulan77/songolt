@@ -3,8 +3,8 @@
 import { motion } from "framer-motion";
 import { ui } from "@/lib/content";
 
-/** Номын тууз — 5 хэсэгтэй, хариулт бүрт нэг хэсэг алтлаг болно. */
-export default function RibbonProgress({ done, total = 5 }: { done: number; total?: number }) {
+/** Номын тууз — 6 хэсэгтэй, бүлэг бүрт нэг хэсэг алтлаг болно. */
+export default function RibbonProgress({ done, total = 6 }: { done: number; total?: number }) {
   return (
     <div
       role="progressbar"

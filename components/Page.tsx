@@ -16,6 +16,8 @@ type LeafProps = {
   frontClass?: string;
   backClass?: string;
   duration?: number;
+  /** Утсан дээр камер холдсоны дараа эргэж эхэлнэ */
+  delay?: number;
   fadeOut?: boolean;
   onDone: () => void;
 };
@@ -31,6 +33,7 @@ export function Leaf({
   frontClass = "",
   backClass = "",
   duration = 0.95,
+  delay = 0,
   fadeOut = false,
   onDone,
 }: LeafProps) {
@@ -44,7 +47,7 @@ export function Leaf({
   });
 
   useEffect(() => {
-    const controls = animate(rot, to, { duration, ease: EASE_BOOK, onComplete: onDone });
+    const controls = animate(rot, to, { duration, delay, ease: EASE_BOOK, onComplete: onDone });
     return () => controls.stop();
     // Нэг удаа л эргэнэ
     // eslint-disable-next-line react-hooks/exhaustive-deps

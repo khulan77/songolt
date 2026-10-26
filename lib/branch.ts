@@ -9,11 +9,12 @@ export const STEM =
 export type Twig = { path: string; tip: [number, number]; petals: number };
 
 export const TWIGS: Twig[] = [
-  { path: "M64 122 Q 74 92, 96 64", tip: [96, 64], petals: 5 },
-  { path: "M150 132 Q 160 156, 182 172", tip: [182, 172], petals: 6 },
-  { path: "M238 116 Q 246 84, 270 52", tip: [270, 52], petals: 7 },
-  { path: "M326 102 Q 340 134, 364 154", tip: [364, 154], petals: 5 },
-  { path: "M430 80 Q 444 52, 470 30", tip: [470, 30], petals: 6 },
+  { path: "M52 124 Q 62 94, 82 66", tip: [82, 66], petals: 5 },
+  { path: "M128 130 Q 138 154, 158 170", tip: [158, 170], petals: 6 },
+  { path: "M206 122 Q 214 90, 236 58", tip: [236, 58], petals: 7 },
+  { path: "M286 108 Q 300 138, 322 156", tip: [322, 156], petals: 5 },
+  { path: "M366 94 Q 378 64, 402 40", tip: [402, 40], petals: 6 },
+  { path: "M446 76 Q 462 102, 486 116", tip: [486, 116], petals: 7 },
 ];
 
 /** Өргөст утасны «X» зангилаа (0,0 төвтэй) */

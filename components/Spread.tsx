@@ -1,10 +1,29 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Leaf } from "./Page";
 
 type Flip = { from: string[]; to: string[]; dir: 1 | -1; id: number };
+
+// Утсан дээр зүүн хуудас нуруунаасаа хол руу хазайж, нээлттэй ном шиг харагдана
+const TILT = -70;
+const tiltStyle = (tilted: boolean) => ({
+  transformOrigin: "right center",
+  transform: `rotateY(${tilted ? TILT : 0}deg)`,
+  transition: "transform 0.7s var(--ease-book)",
+});
+
+function useViewportWidth() {
+  return useSyncExternalStore(
+    (cb) => {
+      window.addEventListener("resize", cb);
+      return () => window.removeEventListener("resize", cb);
+    },
+    () => window.innerWidth,
+    () => 390,
+  );
+}
 
 type Props = {
   /** Үргэлж [зүүн, баруун] — утсан дээр ч нээлттэй ном */
@@ -13,15 +32,12 @@ type Props = {
   order: number;
   renderPage: (id: string | undefined) => ReactNode;
   desktop: boolean;
-  /** Утсан дээр камер аль хуудсыг харж байгаа */
-  focus: "left" | "right";
   reduced: boolean;
   canBack: boolean;
   canForward: boolean;
   onBack: () => void;
   onForward: () => void;
   backLabel: string;
-  forwardLabel: string;
 };
 
 export default function Spread({
@@ -29,14 +45,12 @@ export default function Spread({
   order,
   renderPage,
   desktop,
-  focus,
   reduced,
   canBack,
   canForward,
   onBack,
   onForward,
   backLabel,
-  forwardLabel,
 }: Props) {
   const key = pages.join("|");
   const [st, setSt] = useState<{ key: string; order: number; shown: string[]; flip: Flip | null }>(
@@ -66,16 +80,27 @@ export default function Spread({
 
   const { flip } = view;
 
+  // Утас: ном анх нээгдэхэд болон хуудас эргэх үед камер холдож бүтэн дэлгээтэй номыг харуулна
+  const mobile3d = !desktop && !reduced;
+  const [introZoom, setIntroZoom] = useState(mobile3d);
+  useEffect(() => {
+    if (!introZoom) return;
+    const t = setTimeout(() => setIntroZoom(false), 1100);
+    return () => clearTimeout(t);
+  }, [introZoom]);
+  const zoomed = mobile3d && (introZoom || !!flip);
+  const tilted = !desktop && !zoomed;
+
   // Шинэ хуудас руу focus шилжүүлнэ (keyboard хэрэглэгчид)
   const settledRef = useRef<HTMLDivElement>(null);
-  const settledKey = flip ? null : `${view.shown.join("|")}:${desktop ? "" : focus}`;
+  const settledKey = flip ? null : view.shown.join("|");
   useEffect(() => {
     if (settledKey) settledRef.current?.focus({ preventScroll: true });
   }, [settledKey]);
 
-  // Утсан дээр харагдахгүй байгаа хуудсыг идэвхгүй болгоно (Tab очихгүй)
-  const leftInert = !!flip || (!desktop && focus === "right");
-  const rightInert = !!flip || (!desktop && focus === "left");
+  // Утсан дээр зүүн хуудас зөвхөн чимэглэл — Tab очихгүй
+  const leftInert = !!flip || !desktop;
+  const rightInert = !!flip;
 
   const paperCls = "paper absolute top-0 h-full w-1/2";
   const L = flip ? (flip.dir === 1 ? flip.from[0] : flip.to[0]) : view.shown[0];
@@ -93,9 +118,9 @@ export default function Spread({
         exit={{ opacity: 0 }}
         transition={{ duration: 0.4 }}
       >
-        <div className={`${paperCls} paper-left left-0 rounded-l-sm`} inert={leftInert}>
+        <LeftSlot mobile={!desktop} tilted={tilted} inert={leftInert}>
           {renderPage(pages[0])}
-        </div>
+        </LeftSlot>
         <div className={`${paperCls} paper-right right-0 rounded-r-sm`} inert={rightInert}>
           {renderPage(pages[1])}
         </div>
@@ -104,9 +129,9 @@ export default function Spread({
     </AnimatePresence>
   ) : (
     <div ref={settledRef} tabIndex={-1} className="absolute inset-0" style={{ transformStyle: "preserve-3d" }}>
-      <div className={`${paperCls} paper-left left-0 rounded-l-sm`} inert={leftInert}>
+      <LeftSlot mobile={!desktop} tilted={tilted} inert={leftInert}>
         {renderPage(L)}
-      </div>
+      </LeftSlot>
       <div className={`${paperCls} paper-right right-0 rounded-r-sm`} inert={rightInert}>
         {renderPage(R)}
       </div>
@@ -122,6 +147,7 @@ export default function Spread({
             from={0}
             to={-180}
             origin="left"
+            delay={mobile3d ? 0.4 : 0}
             onDone={done}
           />
         ) : (
@@ -135,6 +161,7 @@ export default function Spread({
             from={0}
             to={180}
             origin="right"
+            delay={mobile3d ? 0.4 : 0}
             onDone={done}
           />
         ))}
@@ -163,48 +190,43 @@ export default function Spread({
     );
   }
 
-  // ───────── Утас: нээлттэй ном, камер хуудас хооронд гулсана ─────────
+  // ───────── Утас: нээлттэй ном. Баруун хуудсыг уншина, зүүн нь хазайж харагдана ─────────
   return (
     <MobileViewport
-      focus={focus}
+      zoomed={zoomed}
       canBack={canBack}
-      canForward={canForward}
       onBack={onBack}
-      onForward={onForward}
       backLabel={backLabel}
-      forwardLabel={forwardLabel}
       flipping={!!flip}
     >
-      <BookBoard />
+      <BookBoard half="right" />
       {pagesEl}
     </MobileViewport>
   );
 }
 
+/** Утасны «камер»: амрах үед баруун хуудас дэлгэцийг дүүргэнэ, zoomed үед бүтэн дэлгээтэй ном багтана */
 function MobileViewport({
   children,
-  focus,
+  zoomed,
   canBack,
-  canForward,
   onBack,
-  onForward,
   backLabel,
-  forwardLabel,
   flipping,
 }: {
   children: ReactNode;
-  focus: "left" | "right";
+  zoomed: boolean;
   canBack: boolean;
-  canForward: boolean;
   onBack: () => void;
-  onForward: () => void;
   backLabel: string;
-  forwardLabel: string;
   flipping: boolean;
 }) {
   const touch = useRef<{ x: number; y: number } | null>(null);
-  const peekBack = !flipping && canBack && focus === "right";
-  const peekForward = !flipping && canForward && focus === "left";
+  const vw = useViewportWidth();
+  const pw = Math.min(vw - 76, 440); // .book-vars --pw-тэй ижил
+  const restX = vw - 16 - pw * 2;
+  const scale = Math.min(1, (vw - 28) / (pw * 2 + 24));
+  const zoomX = (vw - pw * 2 * scale) / 2;
 
   return (
     <div
@@ -220,57 +242,57 @@ function MobileViewport({
         const t = e.changedTouches[0];
         const dx = t.clientX - s.x;
         const dy = t.clientY - s.y;
-        if (Math.abs(dx) < 60 || Math.abs(dy) > Math.abs(dx) * 0.6) return;
-        // Баруун тийш шудрах = өмнөх, зүүн тийш = дараагийнх (зөвхөн хариулт шаардлагагүй үед)
-        if (dx > 0 && canBack) onBack();
-        else if (dx < 0 && canForward) onForward();
+        // Баруун тийш шудрах = өмнөх хуудас
+        if (dx > 60 && Math.abs(dy) < Math.abs(dx) * 0.6 && canBack) onBack();
       }}
     >
-      <div
+      {/* Камер нь 2D (x, scale) — 3D нь зөвхөн идэвхгүй зүүн хуудас ба эргэх хуудсанд, touch-д нөлөөлөхгүй */}
+      <motion.div
         className="relative h-(--ph) w-[calc(var(--pw)*2)]"
-        // Камер нь хавтгай translate: preserve-3d + rotateY нь touch-ийн hit-test-ийг эвддэг.
-        // perspective энд байгаа тул хуудас эргэлт 3D хэвээр.
-        style={{
-          perspective: 1600,
-          transform: focus === "left" ? "translateX(var(--pan-l))" : "translateX(var(--pan-r))",
-          transition: "transform 1s var(--ease-book) 0.08s",
-        }}
+        style={{ perspective: 1200, originX: 0, originY: 0.5 }}
+        initial={false}
+        animate={zoomed ? { x: zoomX, scale } : { x: restX, scale: 1 }}
+        transition={{ duration: zoomed ? 0.5 : 0.75, ease: [0.22, 1, 0.36, 1] }}
       >
         {children}
-      </div>
+      </motion.div>
 
-      {/* Цухуйсан хуудасны ирмэг — дарахад тэр тийш шилжинэ */}
-      {peekBack && <PeekButton side="left" label={backLabel} onClick={onBack} />}
-      {peekForward && <PeekButton side="right" label={forwardLabel} onClick={onForward} />}
+      {/* Зүүн хуудас дээр дарахад өмнөх хуудас */}
+      {!flipping && canBack && (
+        <button
+          type="button"
+          onClick={onBack}
+          aria-label={backLabel}
+          className="absolute inset-y-4 left-0 z-30 flex w-[calc(100vw-16px-var(--pw))] items-center justify-center"
+        >
+          <motion.svg
+            viewBox="0 0 12 20"
+            className="h-5 w-3 text-gold"
+            aria-hidden
+            animate={{ x: [0, -3, 0], opacity: [0.55, 1, 0.55] }}
+            transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
+          >
+            <path d="M9 2 L3 10 L9 18" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+          </motion.svg>
+        </button>
+      )}
     </div>
   );
 }
 
-function PeekButton({ side, label, onClick }: { side: "left" | "right"; label: string; onClick: () => void }) {
+/** Зүүн хуудас. Утсан дээр нуруунаасаа хазайх тул хавтасны хагасыг хамт авч хазайна */
+function LeftSlot({ mobile, tilted, inert, children }: { mobile: boolean; tilted: boolean; inert: boolean; children: ReactNode }) {
+  if (!mobile)
+    return (
+      <div className="paper paper-left absolute left-0 top-0 h-full w-1/2 rounded-l-sm" inert={inert}>
+        {children}
+      </div>
+    );
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label={label}
-      className={`absolute inset-y-4 z-30 flex w-[calc((100vw-var(--pw))/2+6px)] items-center justify-center ${side === "left" ? "left-0" : "right-0"}`}
-    >
-      <motion.svg
-        viewBox="0 0 12 20"
-        className="h-5 w-3 text-gold-deep"
-        aria-hidden
-        animate={{ x: side === "left" ? [0, -3, 0] : [0, 3, 0], opacity: [0.55, 1, 0.55] }}
-        transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
-      >
-        <path
-          d={side === "left" ? "M9 2 L3 10 L9 18" : "M3 2 L9 10 L3 18"}
-          fill="none"
-          stroke="currentColor"
-          strokeWidth={1.8}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </motion.svg>
-    </button>
+    <div className="absolute left-0 top-0 h-full w-1/2" style={tiltStyle(tilted)} inert={inert}>
+      <BookBoard half="left" />
+      <div className="paper paper-left absolute inset-0 rounded-l-sm">{children}</div>
+    </div>
   );
 }
 
@@ -288,12 +310,18 @@ function Spine() {
   );
 }
 
-/** Номын хатуу хавтасны ирмэг + ширээн дээрх сүүдэр */
-function BookBoard() {
+/** Номын хатуу хавтасны ирмэг + ширээн дээрх сүүдэр. Утсан дээр хоёр хагасаар (зүүн нь хазайна) */
+function BookBoard({ half }: { half?: "left" | "right" }) {
+  const inset =
+    half === "left"
+      ? "-left-3 right-0 -inset-y-2.5 rounded-l-md"
+      : half === "right"
+        ? "left-1/2 -right-3 -inset-y-2.5 rounded-r-md"
+        : "-inset-x-3 -inset-y-2.5 rounded-md";
   return (
     <div
       aria-hidden
-      className="pointer-events-none absolute -inset-x-3 -inset-y-2.5 rounded-md"
+      className={`pointer-events-none absolute ${inset}`}
       style={{
         background: "linear-gradient(180deg, #2a2420, #15110e)",
         boxShadow: "0 40px 80px -20px rgba(0,0,0,0.85), 0 10px 30px rgba(0,0,0,0.5)",
@@ -301,7 +329,7 @@ function BookBoard() {
     >
       {/* Цаасан хуудсуудын ирмэг */}
       <div
-        className="absolute inset-x-2 inset-y-1.5 rounded-sm"
+        className={`absolute inset-y-1.5 ${half === "left" ? "left-2 right-0" : half === "right" ? "left-0 right-2" : "inset-x-2"} rounded-sm`}
         style={{
           background: "repeating-linear-gradient(180deg, var(--paper-edge) 0 1px, #b5a585 1px 2px)",
         }}
